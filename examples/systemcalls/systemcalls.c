@@ -9,15 +9,24 @@
 */
 bool do_system(const char *cmd)
 {
+    int status = system(cmd);
 
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
+    if (status != -1)
+    {
+        int exitstatus=WEXITSTATUS(status);
+        if(WIFEXITED(status) && exitstatus==0)
+        {
+            printf("command executed with no errors\n");
+            return true;
+        }
+        printf("command failed with %d error\n", exitstatus);
+    }
+    else
+    {
+        printf("system call could not be performed\n");
+    }
 
-    return true;
+    return false;
 }
 
 /**
@@ -45,23 +54,36 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
-
     va_end(args);
+    const int path = 0;
 
-    return true;
+    // Validate absolute path:
+    if(*command[path] != '/')
+    {
+        printf("ERROR: Path must be absolute\n");
+        return false;
+    }
+
+    int status;
+    pid_t pid=fork();
+    if (pid == -1)
+    {
+        // Error creating child process
+        printf("ERROR: Can not create child process\n");
+        return false;
+    }
+    // We are in the child process
+    else if (pid == 0)
+    {
+        execv (command[path], command);
+        // If execv returns means the command failed
+        exit (-1);
+    }
+    // Wait for child termination
+    if (waitpid (pid, &status, 0) == -1)
+        return false;
+
+    return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }
 
 /**
@@ -80,20 +102,55 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
+    const int path = 0;
 
     va_end(args);
+
+    // Validate absolute path:
+    if(*command[path] != '/')
+    {
+        printf("ERROR: Path must be absolute\n");
+        return false;
+    }
+
+    //Open the redirection file
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0)
+    {
+        perror("open");
+        return false;
+    }
+
+    int status;
+    pid_t pid=fork();
+    if (pid == -1)
+    {
+        // Error creating child process
+        printf("ERROR: Can not create child process\n");
+        close(fd);
+        return false;
+    }
+    // We are in the child process
+    else if (pid == 0)
+    {
+        // Redirect stdout to our file descriptor aka our outputfile
+        if (dup2(fd, STDOUT_FILENO) < 0)
+        {
+            perror("dup2");
+            return false;
+        }
+        close(fd);
+
+        // now we can perform execv as normally
+        execv (command[path], command);
+        // If execv returns means the command failed
+        exit (-1);
+    }
+    // Wait for child termination
+    if (waitpid (pid, &status, 0) == -1)
+        return false;
+
+    return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 
     return true;
 }
