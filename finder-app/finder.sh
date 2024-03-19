@@ -1,3 +1,4 @@
+#!/bin/sh
 
 filesdir=$1
 searchstr=$2
@@ -12,7 +13,7 @@ if ! [ -d $filesdir ]; then
     exit 1
 fi
 
-files_num=$(grep -rl ${searchstr} ${filesdir} | wc -l)
-match_num=$(grep -or ${searchstr} ${filesdir} | wc -w)
+files_num=`grep -rl ${searchstr} ${filesdir} | wc -l`
+match_num=`grep -or ${searchstr} ${filesdir} | wc -w`
 
 echo "The number of files are ${files_num} and the number of matching lines are ${match_num}"
