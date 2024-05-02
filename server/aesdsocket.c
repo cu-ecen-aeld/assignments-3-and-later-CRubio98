@@ -39,18 +39,6 @@ int main(int argc, char* argv[])
     struct addrinfo hints;
     struct addrinfo *res;
 
-    // Check for daemon mode
-    while ((opt = getopt(argc, argv, "d")) != -1)
-    {
-        switch (opt) {
-            case 'd':
-                daemon = true;
-                break;
-            default:
-                fprintf(stderr, "Usage: %s [-d] (daemon)\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    }
     // Set sigaction and handler
     struct sigaction finish_connection;
     memset(&finish_connection,0,sizeof(struct sigaction));
@@ -63,7 +51,18 @@ int main(int argc, char* argv[])
         perror("Error when setting signals");
         return -1;
     }
-
+    // Check for daemon mode
+    while ((opt = getopt(argc, argv, "d")) != -1)
+    {
+        switch (opt) {
+            case 'd':
+                daemon = true;
+                break;
+            default:
+                fprintf(stderr, "Usage: %s [-d] (daemon)\n", argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    }
     // Set Logs
     openlog(NULL, LOG_PID, LOG_USER);
 
@@ -82,6 +81,14 @@ int main(int argc, char* argv[])
         syslog(LOG_ERR,"Error opening socket server fd");
         return -1;
     }
+    // Reuse Addres
+    const int tmp = 1;
+    if (setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
+    {
+        perror("Failed to set SO_REUSEADDR");
+        close(socketfd);
+        return -1;
+    }
     // bind it to the port we passed in to getaddrinfo():
     if(bind(socketfd, res->ai_addr, res->ai_addrlen) == -1)
     {
@@ -91,21 +98,36 @@ int main(int argc, char* argv[])
     }
     // Free res addr info
     freeaddrinfo(res);
+
     if (daemon)
     {
         // Create Process
         pid_t pid = fork();
         if (pid == -1)
         {
-        // Error creating child process
-        syslog(LOG_ERR,"ERROR: Can not create child process");
-        close(socketfd);
-        return -1;
+            // Error creating child process
+            syslog(LOG_ERR,"ERROR: Can not create child process");
+            close(socketfd);
+            return -1;
         }
         if (pid > 0)
         {
             // we are in the parent process so exit
             return 0;
+        }
+        // We are the child
+        int sid = setsid();
+        if (sid < 0)
+        {
+            syslog(LOG_ERR, "couldn't create session");
+            close(socketfd);
+            return -1;
+        }
+        if ((chdir("/")) < 0)
+        {
+            syslog(LOG_ERR, "couldnt change process work dir");
+            close(socketfd);
+            return -1;
         }
     }
     // Listen LISTEN_BACKLOG connections;
@@ -185,11 +207,12 @@ int main(int argc, char* argv[])
                 syslog(LOG_ERR, "Cannot move to the head of the file");
                 perror("Failed to move to head of the file");
                 close(data_fd);
+                remove(DATA_FILE);
                 return -1;
             }
             ssize_t n;
             ssize_t bytes_send;
-            buffer[BUFF_SIZE-1]='\0'; //ensuring not get trash
+            memset(buffer,0,sizeof(buffer));
             while ((n = read(data_fd, buffer, sizeof(buffer)-1)) > 0)
             {
                 syslog(LOG_DEBUG, "Read %ld bytes", n);
@@ -200,8 +223,10 @@ int main(int argc, char* argv[])
                     perror("Failed to send file content into the client socket");
                     close(operative_sfd);
                     close(data_fd);
+                    remove(DATA_FILE);
                     return -1;
                 }
+                memset(buffer,0,sizeof(buffer));
             }
             if (n == 0)
             {
@@ -212,6 +237,7 @@ int main(int argc, char* argv[])
                 perror("Error reading file");
                 close (data_fd);
                 close(socketfd);
+                remove(DATA_FILE);
                 return -1;
             }
 
