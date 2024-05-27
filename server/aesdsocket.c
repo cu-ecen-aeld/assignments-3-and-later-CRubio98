@@ -186,7 +186,6 @@ int main(int argc, char* argv[])
             ssize_t bytes_written;
             if((line_end = memchr(line_start, delim, bytes_received)) != NULL)
             {
-                *(line_end+1)='\0';
                 size_t bytes_to_write = line_end - line_start + 1; // include the newline character
                 bytes_written = write (data_fd, line_start, bytes_to_write);
                 if (bytes_written == -1 || bytes_written != bytes_to_write)
