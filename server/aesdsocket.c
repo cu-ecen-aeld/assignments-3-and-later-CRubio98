@@ -173,31 +173,31 @@ int main(int argc, char* argv[])
         // Receive Routine
         while((bytes_received=recv(operative_sfd, buffer, sizeof(buffer)-1,0))> 0)
         {
+            syslog(LOG_DEBUG,"Received %ld bytes\n", bytes_received);
             char* line_start= (char*)malloc(bytes_received);
             if(line_start==NULL){
                 syslog(LOG_ERR,"Error. Allocation was unsuccessful\n");
                 return -1;
             }
-            strcpy(line_start,buffer);
+            memcpy(line_start,buffer,bytes_received);
             char* line_end;
             const char delim = '\n';
             ssize_t bytes_written;
-            if((line_end = memchr(line_start, delim, strlen(line_start))) != NULL)
+            if((line_end = memchr(line_start, delim, bytes_received)) != NULL)
             {
-                *line_end=0;
-                bytes_written = write (data_fd, line_start, strlen(line_start));
-                if (bytes_written == -1 || bytes_written != strlen(line_start))
+                *(line_end+1)='\0';
+                size_t bytes_to_write = line_end - line_start + 1; // include the newline character
+                bytes_written = write (data_fd, line_start, bytes_to_write);
+                if (bytes_written == -1 || bytes_written != bytes_to_write)
                 {
                     syslog(LOG_ERR,"Error ocurred while writing your string");
                 }
                 sync();
-                write (data_fd,(const void*)&delim, sizeof(delim));
-                //line_start = line_end + 1;
                 free(line_start);
                 break;
             }
             syslog(LOG_DEBUG,"No more delimiters found");
-            write(data_fd,line_start,strlen(line_start));
+            write(data_fd,line_start,bytes_received);
             free(line_start);
         }
         // Send Routine
@@ -226,6 +226,7 @@ int main(int argc, char* argv[])
                     remove(DATA_FILE);
                     return -1;
                 }
+                syslog(LOG_DEBUG, "Sent %ld bytes", bytes_send);
                 memset(buffer,0,sizeof(buffer));
             }
             if (n == 0)
