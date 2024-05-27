@@ -49,7 +49,7 @@ int main(int argc, char* argv[])
     {
         syslog(LOG_ERR, "Sigaction Error");
         perror("Error when setting signals");
-        return -1;
+        exit(EXIT_FAILURE);
     }
     // Check for daemon mode
     while ((opt = getopt(argc, argv, "d")) != -1)
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
     if(socketfd == -1)
     {
         syslog(LOG_ERR,"Error opening socket server fd");
-        return -1;
+        exit(EXIT_FAILURE);
     }
     // Reuse Addres
     const int tmp = 1;
@@ -87,14 +87,14 @@ int main(int argc, char* argv[])
     {
         perror("Failed to set SO_REUSEADDR");
         close(socketfd);
-        return -1;
+        exit(EXIT_FAILURE);
     }
     // bind it to the port we passed in to getaddrinfo():
     if(bind(socketfd, res->ai_addr, res->ai_addrlen) == -1)
     {
         syslog(LOG_ERR,"Error binding desired port");
         close(socketfd); 
-        return -1;
+        exit(EXIT_FAILURE);
     }
     // Free res addr info
     freeaddrinfo(res);
@@ -108,12 +108,13 @@ int main(int argc, char* argv[])
             // Error creating child process
             syslog(LOG_ERR,"ERROR: Can not create child process");
             close(socketfd);
-            return -1;
+            exit(EXIT_FAILURE);
         }
         if (pid > 0)
         {
             // we are in the parent process so exit
-            return 0;
+            printf("The PID of child process is = %d\n", pid);
+            exit(EXIT_SUCCESS);
         }
         // We are the child
         int sid = setsid();
@@ -121,13 +122,13 @@ int main(int argc, char* argv[])
         {
             syslog(LOG_ERR, "couldn't create session");
             close(socketfd);
-            return -1;
+            exit(EXIT_FAILURE);
         }
         if ((chdir("/")) < 0)
         {
             syslog(LOG_ERR, "couldnt change process work dir");
             close(socketfd);
-            return -1;
+            exit(EXIT_FAILURE);
         }
     }
     // Listen LISTEN_BACKLOG connections;
@@ -135,7 +136,7 @@ int main(int argc, char* argv[])
     {
         syslog(LOG_ERR,"Error listening");
         close(socketfd); 
-        return -1;
+        exit(EXIT_FAILURE);
     }
     
     syslog(LOG_DEBUG,"Starting Listening...");
@@ -145,7 +146,7 @@ int main(int argc, char* argv[])
     {
             perror("Failed to open aesdsocketdata");
             close(socketfd); 
-            return -1;
+            exit(EXIT_FAILURE);
     }
 
     // Loop for connection
@@ -177,7 +178,7 @@ int main(int argc, char* argv[])
             char* line_start= (char*)malloc(bytes_received);
             if(line_start==NULL){
                 syslog(LOG_ERR,"Error. Allocation was unsuccessful\n");
-                return -1;
+                exit(EXIT_FAILURE);
             }
             memcpy(line_start,buffer,bytes_received);
             char* line_end;
@@ -208,7 +209,7 @@ int main(int argc, char* argv[])
                 perror("Failed to move to head of the file");
                 close(data_fd);
                 remove(DATA_FILE);
-                return -1;
+                exit(EXIT_FAILURE);
             }
             ssize_t n;
             ssize_t bytes_send;
@@ -224,7 +225,7 @@ int main(int argc, char* argv[])
                     close(operative_sfd);
                     close(data_fd);
                     remove(DATA_FILE);
-                    return -1;
+                    exit(EXIT_FAILURE);
                 }
                 syslog(LOG_DEBUG, "Sent %ld bytes", bytes_send);
                 memset(buffer,0,sizeof(buffer));
@@ -239,7 +240,7 @@ int main(int argc, char* argv[])
                 close (data_fd);
                 close(socketfd);
                 remove(DATA_FILE);
-                return -1;
+                exit(EXIT_FAILURE);
             }
 
         // Notify closing connection in the client IP
