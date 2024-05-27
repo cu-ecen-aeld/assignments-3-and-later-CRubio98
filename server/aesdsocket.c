@@ -130,6 +130,9 @@ int main(int argc, char* argv[])
             close(socketfd);
             exit(EXIT_FAILURE);
         }
+        dup2(open("/dev/null", O_RDWR), STDIN_FILENO);
+        dup2(STDIN_FILENO, STDOUT_FILENO);
+        dup2(STDOUT_FILENO, STDERR_FILENO);
     }
     // Listen LISTEN_BACKLOG connections;
     if(listen(socketfd, LISTEN_BACKLOG) == -1)
@@ -175,30 +178,22 @@ int main(int argc, char* argv[])
         while((bytes_received=recv(operative_sfd, buffer, sizeof(buffer)-1,0))> 0)
         {
             syslog(LOG_DEBUG,"Received %ld bytes\n", bytes_received);
-            char* line_start= (char*)malloc(bytes_received);
-            if(line_start==NULL){
-                syslog(LOG_ERR,"Error. Allocation was unsuccessful\n");
-                exit(EXIT_FAILURE);
-            }
-            memcpy(line_start,buffer,bytes_received);
             char* line_end;
             const char delim = '\n';
             ssize_t bytes_written;
-            if((line_end = memchr(line_start, delim, bytes_received)) != NULL)
+            if((line_end = memchr(buffer, delim, bytes_received)) != NULL)
             {
-                size_t bytes_to_write = line_end - line_start + 1; // include the newline character
-                bytes_written = write (data_fd, line_start, bytes_to_write);
+                size_t bytes_to_write = line_end - buffer + 1; // include the newline character
+                bytes_written = write (data_fd, buffer, bytes_to_write);
                 if (bytes_written == -1 || bytes_written != bytes_to_write)
                 {
                     syslog(LOG_ERR,"Error ocurred while writing your string");
                 }
                 sync();
-                free(line_start);
                 break;
             }
             syslog(LOG_DEBUG,"No more delimiters found");
-            write(data_fd,line_start,bytes_received);
-            free(line_start);
+            write(data_fd,buffer,bytes_received);
         }
         // Send Routine
         // move to start of the file
@@ -213,10 +208,9 @@ int main(int argc, char* argv[])
             ssize_t n;
             ssize_t bytes_send;
             memset(buffer,0,sizeof(buffer));
-            while ((n = read(data_fd, buffer, sizeof(buffer)-1)) > 0)
+            while ((n = read(data_fd, buffer, sizeof(buffer))) > 0)
             {
                 syslog(LOG_DEBUG, "Read %ld bytes", n);
-                syslog(LOG_DEBUG, "Read %ld bytes results in string: %s", n, buffer);
                 if ((bytes_send=send(operative_sfd, buffer, n, 0)) == -1)
                 {
                     syslog(LOG_DEBUG, "Error when sending to client socket");
@@ -227,7 +221,6 @@ int main(int argc, char* argv[])
                     exit(EXIT_FAILURE);
                 }
                 syslog(LOG_DEBUG, "Sent %ld bytes", bytes_send);
-                memset(buffer,0,sizeof(buffer));
             }
             if (n == 0)
             {
