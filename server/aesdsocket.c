@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #define LISTEN_BACKLOG  1
-#define BUFF_SIZE       60
+#define BUFF_SIZE       1024
 #define DATA_FILE       "/var/tmp/aesdsocketdata"
 
 bool waiting_cnn = true;
