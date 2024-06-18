@@ -2,28 +2,22 @@
 
 bool waiting_cnn = true;
 
-aesdsocket_t* aesdsocket_ctor(struct addrinfo* hints)
+aesdsocket_t* aesdsocket_ctor(struct addrinfo hints)
 {
     aesdsocket_t* new_aesdsocket = (aesdsocket_t*) malloc(sizeof(aesdsocket_t));
     if(new_aesdsocket == NULL)
     {
         return NULL;
     }
-    new_aesdsocket->res= (struct addrinfo*) malloc(sizeof(struct addrinfo));
-    if(new_aesdsocket->res == NULL)
+
+    // Create dynamic buffer
+    new_aesdsocket->buffer = malloc(sizeof INIT_BUFF_SIZE);
+    if(new_aesdsocket->buffer == NULL)
     {
         free(new_aesdsocket);
         return NULL;
     }
 
-    // Create dynamic buffer
-    new_aesdsocket->buffer = malloc(sizeof INIT_BUFF_SIZE);
-    if(new_aesdsocket->res == NULL)
-    {
-        free(new_aesdsocket);
-        free(new_aesdsocket->res);
-        return NULL;
-    }
     new_aesdsocket->data_size=INIT_BUFF_SIZE;
     // Get size of struct
     new_aesdsocket->peer_addr_size=sizeof new_aesdsocket->peer_addr;
@@ -31,12 +25,13 @@ aesdsocket_t* aesdsocket_ctor(struct addrinfo* hints)
     // Set Logs
     openlog("socket_adt", LOG_PID, LOG_USER);
     // We will get addrs info from hints argument
-    getaddrinfo(NULL, (const char*)DEFAULT_PORT, hints, &new_aesdsocket->res);
+    struct addrinfo *res;
+    getaddrinfo(NULL, DEFAULT_PORT, &hints, &res);
 
     // Get a new socket file descriptor
-    new_aesdsocket->socketfd = socket(new_aesdsocket->res->ai_family,
-                                      new_aesdsocket->res->ai_socktype,
-                                      new_aesdsocket->res->ai_protocol);
+    new_aesdsocket->socketfd = socket(res->ai_family,
+                                      res->ai_socktype,
+                                      res->ai_protocol);
 
     if(new_aesdsocket->socketfd == -1)
     {
@@ -54,15 +49,16 @@ aesdsocket_t* aesdsocket_ctor(struct addrinfo* hints)
     }
 
     // bind it to the port we passed in to getaddrinfo():
-    if(bind(new_aesdsocket->socketfd,new_aesdsocket->res->ai_addr,
-            new_aesdsocket->res->ai_addrlen) == -1)
+    if(bind(new_aesdsocket->socketfd,res->ai_addr,
+            res->ai_addrlen) == -1)
     {
         syslog(LOG_ERR,"Error binding desired port");
         close(new_aesdsocket->socketfd); 
         return NULL;
     }
+
     // Free res addr info
-    freeaddrinfo(new_aesdsocket->res);
+    freeaddrinfo(res);
 
     return new_aesdsocket;
 }
@@ -73,7 +69,6 @@ void aesdsocket_dtor(aesdsocket_t* this)
     // Close the socket file 
     close(this->socketfd);
     if(this->buffer){free (this->buffer);}
-    if(this->res){free (this->res);}
     free(this);
 }
 
@@ -193,7 +188,7 @@ int main(int argc, char* argv[])
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
     // make a socket:
-    aesdsocket_t* my_socket=aesdsocket_ctor(&hints);
+    aesdsocket_t* my_socket=aesdsocket_ctor(hints);
     if(my_socket == NULL)
     {
         exit(EXIT_FAILURE);

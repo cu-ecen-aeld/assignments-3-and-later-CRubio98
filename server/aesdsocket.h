@@ -19,13 +19,12 @@
 #define LISTEN_BACKLOG      1
 #define INIT_BUFF_SIZE      1024
 #define DATA_FILE           "/var/tmp/aesdsocketdata"
-#define DEFAULT_PORT        9000
+#define DEFAULT_PORT        "9000"
 
 struct aesdsocket
 {
     socklen_t peer_addr_size;
     struct sockaddr_storage peer_addr;
-    struct addrinfo *res;
     int socketfd;
     int client_sfd;
     char* buffer;
@@ -33,7 +32,7 @@ struct aesdsocket
 };
 typedef struct aesdsocket aesdsocket_t;
 
-aesdsocket_t* aesdsocket_ctor(struct addrinfo* hints);
+aesdsocket_t* aesdsocket_ctor(struct addrinfo hints);
 void aesdsocket_dtor(aesdsocket_t* this);
 bool aesdsocket_listen(aesdsocket_t* this);
 bool aesdsocket_connect(aesdsocket_t* this,char* client_ip);
