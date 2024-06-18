@@ -7,7 +7,7 @@ default: aesdsocket
 
 aesdsocket: aesdsocket.o
 	$(ARCH) $^ -o $@
-aesdsocket.o: aesdsocket.c
+aesdsocket.o: aesdsocket.c aesdsocket.h 
 	$(ARCH) -c $<
 
 .PHONY: clean
