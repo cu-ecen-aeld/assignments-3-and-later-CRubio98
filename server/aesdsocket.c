@@ -2,76 +2,67 @@
 
 bool waiting_cnn = true;
 
-aesdsocket_t* aesdsocket_ctor(struct addrinfo hints)
+aesdsocket_t* aesdsocket_ctor(void)
 {
     aesdsocket_t* new_aesdsocket = (aesdsocket_t*) malloc(sizeof(aesdsocket_t));
-    if(new_aesdsocket == NULL)
+    if(new_aesdsocket != NULL)
     {
-        return NULL;
+        // Get size of struct
+        new_aesdsocket->peer_addr_size=sizeof new_aesdsocket->peer_addr;
     }
-
-    // Create dynamic buffer
-    new_aesdsocket->buffer = malloc(sizeof INIT_BUFF_SIZE);
-    if(new_aesdsocket->buffer == NULL)
-    {
-        free(new_aesdsocket);
-        return NULL;
-    }
-
-    new_aesdsocket->data_size=INIT_BUFF_SIZE;
-    // Get size of struct
-    new_aesdsocket->peer_addr_size=sizeof new_aesdsocket->peer_addr;
-
-    // Set Logs
-    openlog("socket_adt", LOG_PID, LOG_USER);
-    // We will get addrs info from hints argument
-    struct addrinfo *res;
-    getaddrinfo(NULL, DEFAULT_PORT, &hints, &res);
-
-    // Get a new socket file descriptor
-    new_aesdsocket->socketfd = socket(res->ai_family,
-                                      res->ai_socktype,
-                                      res->ai_protocol);
-
-    if(new_aesdsocket->socketfd == -1)
-    {
-        syslog(LOG_ERR,"Error opening socket server fd");
-        return NULL;
-    }
-
-    // Reuse Address
-    const int tmp = 1;
-    if (setsockopt(new_aesdsocket->socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
-    {
-        syslog(LOG_ERR,"Failed to set SO_REUSEADDR");
-        close(new_aesdsocket->socketfd);
-        return NULL;
-    }
-
-    // bind it to the port we passed in to getaddrinfo():
-    if(bind(new_aesdsocket->socketfd,res->ai_addr,
-            res->ai_addrlen) == -1)
-    {
-        syslog(LOG_ERR,"Error binding desired port");
-        close(new_aesdsocket->socketfd); 
-        return NULL;
-    }
-
-    // Free res addr info
-    freeaddrinfo(res);
 
     return new_aesdsocket;
 }
+
 void aesdsocket_dtor(aesdsocket_t* this)
 {
     if(!this){return;}
 
     // Close the socket file 
     close(this->socketfd);
-    if(this->buffer){free (this->buffer);}
     free(this);
 }
 
+bool aesdsocket_setup_server(aesdsocket_t* this, struct addrinfo hints)
+{
+    openlog("aesdsocket_setup", LOG_PID, LOG_USER);
+    // We will get addrs info from hints argument
+    struct addrinfo *res;
+    getaddrinfo(NULL, DEFAULT_PORT, &hints, &res);
+
+    // Get a new socket file descriptor
+    this->socketfd = socket(res->ai_family,
+                                      res->ai_socktype,
+                                      res->ai_protocol);
+
+    if(this->socketfd == -1)
+    {
+        syslog(LOG_ERR,"Error opening socket server fd");
+        return false;
+    }
+
+    // Reuse Address
+    const int tmp = 1;
+    if (setsockopt(this->socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
+    {
+        syslog(LOG_ERR,"Failed to set SO_REUSEADDR");
+        close(this->socketfd);
+        return false;
+    }
+
+    // bind it to the port we passed in to getaddrinfo():
+    if(bind(this->socketfd,res->ai_addr,
+            res->ai_addrlen) == -1)
+    {
+        syslog(LOG_ERR,"Error binding desired port");
+        close(this->socketfd); 
+        return false;
+    }
+
+    // Free res addr info
+    freeaddrinfo(res);
+    return true;
+}
 bool aesdsocket_listen(aesdsocket_t* this)
 {
     bool listening = true;
@@ -100,42 +91,14 @@ bool aesdsocket_connect(aesdsocket_t* this,char* client_ip)
 
     return true;
 }
-bool aesdsocket_recv(aesdsocket_t* this)
+ssize_t aesdsocket_recv(aesdsocket_t* this, char* buffer, size_t buff_size)
 {
-    int bytes_received=recv(this->client_sfd, this->buffer, INIT_BUFF_SIZE-1,0);
-    if(!(bytes_received > 0)){return false;}
-
-    if (INIT_BUFF_SIZE != bytes_received)
-    {
-        this->buffer=realloc(this->buffer, bytes_received);
-        if( this->buffer == NULL)
-        {
-            return false;
-        }
-        this->data_size=bytes_received;
-    }
-    return true;
+    return recv(this->client_sfd, buffer, buff_size-1,0);
 }
 
-int aesdsocket_send(aesdsocket_t* this)
+ssize_t aesdsocket_send(aesdsocket_t* this, char* buffer, size_t buff_size)
 {
-   int bytes_send=send(this->client_sfd, this->buffer, this->data_size, 0);
-   return bytes_send;
-}
-
-void aesdsocket_get_buffer(aesdsocket_t* this,char* output_buffer, size_t* size)
-{
-    output_buffer= this->buffer;
-    *size= this->data_size;
-}
-
-void aesdsocket_set_buffer(aesdsocket_t* this,char* buffer, size_t size)
-{
-    free(this->buffer);
-    this->buffer= malloc(size);
-
-    memcpy(this->buffer,buffer,size);
-    this->data_size= size;
+   return send(this->client_sfd, buffer, buff_size, 0);
 }
 
 static void signal_handler (int signo)
@@ -188,9 +151,15 @@ int main(int argc, char* argv[])
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
     // make a socket:
-    aesdsocket_t* my_socket=aesdsocket_ctor(hints);
+    aesdsocket_t* my_socket=aesdsocket_ctor();
     if(my_socket == NULL)
     {
+        syslog(LOG_ERR, "Socker Server instance could not be created");
+        exit(EXIT_FAILURE);
+    }
+    if(!aesdsocket_setup_server(my_socket, hints))
+    {
+        syslog(LOG_ERR,"ERROR: Socket Server could not be setup");
         exit(EXIT_FAILURE);
     }
 
@@ -258,18 +227,16 @@ int main(int argc, char* argv[])
         }
         // Notify there is a connection from a client IP
         syslog(LOG_INFO,"Accepted connection from %s\n", ip_client);
-
+        char buffer[BUFF_SIZE]={0};
+        ssize_t bytes_received;
         // Receive Routine
-        while(aesdsocket_recv(my_socket))
+        while((bytes_received=aesdsocket_recv(my_socket, buffer, sizeof(buffer)))> 0)
         {
-            char* buffer=NULL;
-            size_t buffer_size;
-            aesdsocket_get_buffer(my_socket, buffer, &buffer_size);
-            syslog(LOG_DEBUG,"Received %ld bytes\n", buffer_size);
+            syslog(LOG_DEBUG,"Received %ld bytes\n", bytes_received);
             char* line_end;
             const char delim = '\n';
             ssize_t bytes_written;
-            if((line_end = memchr(buffer, delim, buffer_size)) != NULL)
+            if((line_end = memchr(buffer, delim, bytes_received)) != NULL)
             {
                 size_t bytes_to_write = line_end - buffer + 1; // include the newline character
                 bytes_written = write (data_fd, buffer, bytes_to_write);
@@ -281,7 +248,7 @@ int main(int argc, char* argv[])
                 break;
             }
             syslog(LOG_DEBUG,"No more delimiters found");
-            write(data_fd,buffer,buffer_size);
+            write(data_fd,buffer,bytes_received);
         }
         // Send Routine
         // move to start of the file
@@ -295,13 +262,11 @@ int main(int argc, char* argv[])
             }
             ssize_t n;
             ssize_t bytes_send;
-            char buffer[INIT_BUFF_SIZE];
             memset(buffer,0,sizeof(buffer));
             while ((n = read(data_fd, buffer, sizeof(buffer))) > 0)
             {
                 syslog(LOG_DEBUG, "Read %ld bytes", n);
-                aesdsocket_set_buffer(my_socket, buffer, sizeof(buffer));
-                if ((bytes_send=aesdsocket_send(my_socket)) == -1)
+                if ((bytes_send=aesdsocket_send(my_socket,buffer,n)) == -1)
                 {
                     syslog(LOG_DEBUG, "Error when sending to client socket");
                     perror("Failed to send file content into the client socket");
