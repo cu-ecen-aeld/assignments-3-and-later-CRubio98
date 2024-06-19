@@ -18,7 +18,7 @@ void aesdsocket_dtor(aesdsocket_t* this)
 {
     if(!this){return;}
 
-    // Close the socket file 
+    // Close the socket server file descriptor
     close(this->socketfd);
     free(this);
 }
@@ -63,6 +63,7 @@ bool aesdsocket_setup_server(aesdsocket_t* this, struct addrinfo hints)
     freeaddrinfo(res);
     return true;
 }
+
 bool aesdsocket_listen(aesdsocket_t* this)
 {
     bool listening = true;
@@ -90,6 +91,15 @@ bool aesdsocket_connect(aesdsocket_t* this,char* client_ip)
               client_ip, INET_ADDRSTRLEN);
 
     return true;
+}
+bool aesdsocket_close_connection(aesdsocket_t* this)
+{
+    bool closed=false;
+    if(close(this->client_sfd)!= -1)
+    {
+        closed=true;
+    }
+    return closed;
 }
 ssize_t aesdsocket_recv(aesdsocket_t* this, char* buffer, size_t buff_size)
 {
@@ -256,7 +266,9 @@ int main(int argc, char* argv[])
             {
                 syslog(LOG_ERR, "Cannot move to the head of the file");
                 perror("Failed to move to head of the file");
+                aesdsocket_close_connection(my_socket);
                 aesdsocket_dtor(my_socket);
+                close(data_fd);
                 remove(DATA_FILE);
                 exit(EXIT_FAILURE);
             }
@@ -270,6 +282,7 @@ int main(int argc, char* argv[])
                 {
                     syslog(LOG_DEBUG, "Error when sending to client socket");
                     perror("Failed to send file content into the client socket");
+                    aesdsocket_close_connection(my_socket);
                     aesdsocket_dtor(my_socket);
                     close(data_fd);
                     remove(DATA_FILE);
@@ -285,6 +298,7 @@ int main(int argc, char* argv[])
             {
                 perror("Error reading file");
                 close (data_fd);
+                aesdsocket_close_connection(my_socket);
                 aesdsocket_dtor(my_socket);
                 remove(DATA_FILE);
                 exit(EXIT_FAILURE);
@@ -292,10 +306,10 @@ int main(int argc, char* argv[])
 
         // Notify closing connection in the client IP
         syslog(LOG_INFO,"Closed connection from %s\n", ip_client);
-        aesdsocket_dtor(my_socket);
+        aesdsocket_close_connection(my_socket);
     }
 
-    //Close socket fd
+    //Close socket fd and delete ADT
     aesdsocket_dtor(my_socket);
     // close fd for DATAFILE
     close(data_fd);
