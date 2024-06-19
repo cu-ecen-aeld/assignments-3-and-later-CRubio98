@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "aesdsocket.h"
+#include "socketserver.h"
 
-#define BUFF_SIZE           1024
+#define BUFF_SIZE           2046
 #define DATA_FILE           "/var/tmp/aesdsocketdata"
 
 bool waiting_cnn = true;
@@ -52,21 +52,15 @@ int main(int argc, char* argv[])
     // Set Logs
     openlog(NULL, LOG_PID, LOG_USER);
 
-    // first, load up address structs with getaddrinfo():
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;  // use IPv4
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
-
     // make a socket:
-    aesdsocket_t* my_socket=aesdsocket_ctor();
+    socketserver_t* my_socket=socketserver_ctor();
+    const char* socket_port="9000";
     if(my_socket == NULL)
     {
         syslog(LOG_ERR, "Socker Server instance could not be created");
         exit(EXIT_FAILURE);
     }
-    if(!aesdsocket_setup_server(my_socket, hints))
+    if(!socketserver_setup(my_socket,socket_port, false))
     {
         syslog(LOG_ERR,"ERROR: Socket Server could not be setup");
         exit(EXIT_FAILURE);
@@ -80,7 +74,7 @@ int main(int argc, char* argv[])
         {
             // Error creating child process
             syslog(LOG_ERR,"ERROR: Can not create child process");
-            aesdsocket_dtor(my_socket);
+            socketserver_dtor(my_socket);
             exit(EXIT_FAILURE);
         }
         if (pid > 0)
@@ -94,13 +88,13 @@ int main(int argc, char* argv[])
         if (sid < 0)
         {
             syslog(LOG_ERR, "couldn't create session");
-            aesdsocket_dtor(my_socket);
+            socketserver_dtor(my_socket);
             exit(EXIT_FAILURE);
         }
         if ((chdir("/")) < 0)
         {
             syslog(LOG_ERR, "couldnt change process work dir");
-            aesdsocket_dtor(my_socket);
+            socketserver_dtor(my_socket);
             exit(EXIT_FAILURE);
         }
         dup2(open("/dev/null", O_RDWR), STDIN_FILENO);
@@ -108,10 +102,10 @@ int main(int argc, char* argv[])
         dup2(STDOUT_FILENO, STDERR_FILENO);
     }
     // Listen LISTEN_BACKLOG connections;
-    if(!aesdsocket_listen(my_socket))
+    if(!socketserver_listen(my_socket))
     {
         syslog(LOG_ERR,"Error listening");
-        aesdsocket_dtor(my_socket);
+        socketserver_dtor(my_socket);
         exit(EXIT_FAILURE);
     }
     
@@ -121,7 +115,7 @@ int main(int argc, char* argv[])
     if (data_fd < 0)
     {
             perror("Failed to open aesdsocketdata");
-            aesdsocket_dtor(my_socket);
+            socketserver_dtor(my_socket);
             exit(EXIT_FAILURE);
     }
 
@@ -129,7 +123,7 @@ int main(int argc, char* argv[])
     while(waiting_cnn)
     {
         char ip_client[INET_ADDRSTRLEN];
-        if(aesdsocket_connect(my_socket, ip_client) == false)
+        if(socketserver_connect(my_socket, ip_client) == false)
         {
             perror("accept");
             continue; //Continue listening
@@ -139,7 +133,7 @@ int main(int argc, char* argv[])
         char buffer[BUFF_SIZE]={0};
         ssize_t bytes_received;
         // Receive Routine
-        while((bytes_received=aesdsocket_recv(my_socket, buffer, sizeof(buffer)))> 0)
+        while((bytes_received=socketserver_recv(my_socket, buffer, sizeof(buffer)))> 0)
         {
             syslog(LOG_DEBUG,"Received %ld bytes\n", bytes_received);
             char* line_end;
@@ -165,8 +159,8 @@ int main(int argc, char* argv[])
             {
                 syslog(LOG_ERR, "Cannot move to the head of the file");
                 perror("Failed to move to head of the file");
-                aesdsocket_close_connection(my_socket);
-                aesdsocket_dtor(my_socket);
+                socketserver_close_connection(my_socket);
+                socketserver_dtor(my_socket);
                 close(data_fd);
                 remove(DATA_FILE);
                 exit(EXIT_FAILURE);
@@ -177,12 +171,12 @@ int main(int argc, char* argv[])
             while ((n = read(data_fd, buffer, sizeof(buffer))) > 0)
             {
                 syslog(LOG_DEBUG, "Read %ld bytes", n);
-                if ((bytes_send=aesdsocket_send(my_socket,buffer,n)) == -1)
+                if ((bytes_send=socketserver_send(my_socket,buffer,n)) == -1)
                 {
                     syslog(LOG_DEBUG, "Error when sending to client socket");
                     perror("Failed to send file content into the client socket");
-                    aesdsocket_close_connection(my_socket);
-                    aesdsocket_dtor(my_socket);
+                    socketserver_close_connection(my_socket);
+                    socketserver_dtor(my_socket);
                     close(data_fd);
                     remove(DATA_FILE);
                     exit(EXIT_FAILURE);
@@ -197,19 +191,19 @@ int main(int argc, char* argv[])
             {
                 perror("Error reading file");
                 close (data_fd);
-                aesdsocket_close_connection(my_socket);
-                aesdsocket_dtor(my_socket);
+                socketserver_close_connection(my_socket);
+                socketserver_dtor(my_socket);
                 remove(DATA_FILE);
                 exit(EXIT_FAILURE);
             }
 
         // Notify closing connection in the client IP
         syslog(LOG_INFO,"Closed connection from %s\n", ip_client);
-        aesdsocket_close_connection(my_socket);
+        socketserver_close_connection(my_socket);
     }
 
     //Close socket fd and delete ADT
-    aesdsocket_dtor(my_socket);
+    socketserver_dtor(my_socket);
     // close fd for DATAFILE
     close(data_fd);
     remove(DATA_FILE);
