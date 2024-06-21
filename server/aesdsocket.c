@@ -1,14 +1,39 @@
 #include "aesdsocket.h"
 
-aesdsocket_t* aesdsocket_ctor(void)
+aesdsocket_t* aesdsocket_ctor(size_t buffer_size)
 {
-    aesdsocket_t* new_aesdsocket = (aesdsocket_t*) malloc(sizeof(aesdsocket_t));
-    if(new_aesdsocket != NULL)
+    aesdsocket_t* new_aesdsocket= (aesdsocket_t*) malloc(sizeof(aesdsocket_t));
+    if(new_aesdsocket == NULL)
     {
-        // Get size of struct
-        new_aesdsocket->peer_addr_size=sizeof new_aesdsocket->peer_addr;
+        return NULL;
     }
 
+    new_aesdsocket->buff_size=buffer_size;
+
+    new_aesdsocket->buffer= (char*) malloc(buffer_size);
+    if(new_aesdsocket->buffer == NULL)
+    {
+        free(new_aesdsocket);
+        return NULL;
+    }
+
+    new_aesdsocket->ip_client=(char*) malloc(sizeof(IP_LENGTH+1));
+    if(new_aesdsocket->ip_client == NULL)
+    {
+        free(new_aesdsocket->buffer);
+        free(new_aesdsocket);
+        return NULL;
+    }
+
+    new_aesdsocket->server= socketserver_ctor();
+
+    if(new_aesdsocket->server == NULL)
+    {
+        free(new_aesdsocket->ip_client);
+        free(new_aesdsocket->buffer);
+        free(new_aesdsocket);
+        return NULL;
+    }
     return new_aesdsocket;
 }
 
@@ -16,95 +41,136 @@ void aesdsocket_dtor(aesdsocket_t* this)
 {
     if(!this){return;}
 
-    // Close the socket server file descriptor
-    close(this->socketfd);
+    socketserver_dtor(this->server);
+    free(this->ip_client);
+    free(this->buffer);
     free(this);
+    remove(DATA_FILE);
 }
 
-bool aesdsocket_setup_server(aesdsocket_t* this, struct addrinfo hints)
+bool aesdsocket_conf_server(aesdsocket_t* this, const char* socket_port)
 {
-    openlog("aesdsocket_setup", LOG_PID, LOG_USER);
-    // We will get addrs info from hints argument
-    struct addrinfo *res;
-    getaddrinfo(NULL, DEFAULT_PORT, &hints, &res);
 
-    // Get a new socket file descriptor
-    this->socketfd = socket(res->ai_family,
-                                      res->ai_socktype,
-                                      res->ai_protocol);
-
-    if(this->socketfd == -1)
+    // Start the socket server
+    if(!socketserver_setup(this->server,socket_port, false))
     {
-        syslog(LOG_ERR,"Error opening socket server fd");
         return false;
     }
-
-    // Reuse Address
-    const int tmp = 1;
-    if (setsockopt(this->socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
-    {
-        syslog(LOG_ERR,"Failed to set SO_REUSEADDR");
-        close(this->socketfd);
-        return false;
-    }
-
-    // bind it to the port we passed in to getaddrinfo():
-    if(bind(this->socketfd,res->ai_addr,
-            res->ai_addrlen) == -1)
-    {
-        syslog(LOG_ERR,"Error binding desired port");
-        close(this->socketfd); 
-        return false;
-    }
-
-    // Free res addr info
-    freeaddrinfo(res);
     return true;
 }
 
-bool aesdsocket_listen(aesdsocket_t* this)
+bool aesdsocket_server_listen(aesdsocket_t* this)
 {
-    bool listening = true;
-    if(listen(this->socketfd, LISTEN_BACKLOG) == -1)
+    // Listen LISTEN_BACKLOG connections;
+    bool listening=true;
+    syslog(LOG_DEBUG,"Starting Listening...");
+    if(!socketserver_listen(this->server))
     {
-        listening=false;
+       syslog(LOG_ERR, "Socket server could not listen");
+       listening=false;
     }
-
+    closelog();
     return listening;
 }
 
-bool aesdsocket_connect(aesdsocket_t* this,char* client_ip)
+bool aesdsocket_recv_routine(aesdsocket_t* this)
 {
-    this->client_sfd= accept(this->socketfd,(struct sockaddr *) &this->peer_addr,
-                             &this->peer_addr_size);
+    // Open aesdsocketdata
+    int data_fd = open(DATA_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    ssize_t bytes_received;
 
-    if(this->client_sfd == -1)
+    if (data_fd < 0)
     {
         return false;
     }
-
-    // Get client IP
-    inet_ntop(this->peer_addr.ss_family,
-              &((struct sockaddr_in*)&(this->peer_addr))->sin_addr,
-              client_ip, INET_ADDRSTRLEN);
-
+    while((bytes_received=socketserver_recv(this->server, this->buffer, this->buff_size))> 0)
+    {
+        char* line_end;
+        const char delim = '\n';
+        //ssize_t bytes_written;
+        if((line_end = memchr(this->buffer, delim, bytes_received)) != NULL)
+        {
+            size_t bytes_to_write = line_end - this->buffer + 1; // include the newline character
+            ///bytes_written = 
+            write (data_fd, this->buffer, bytes_to_write);
+            //if (bytes_written == -1 || bytes_written != bytes_to_write)
+            //{
+            //    syslog(LOG_ERR,"Error ocurred while writing your string");
+            //}
+            sync();
+            break;
+        }
+        write(data_fd,this->buffer,bytes_received);
+    }
+    close(data_fd);
     return true;
 }
-bool aesdsocket_close_connection(aesdsocket_t* this)
+
+bool aesdsocket_send_routine(aesdsocket_t* this)
+{
+    // Open aesdsocketdata to read
+    int data_fd = open(DATA_FILE, O_RDONLY, 0644);
+    if (data_fd < 0)
+    {
+        return false;
+    }
+    ssize_t bytes_read;
+    ssize_t bytes_send;
+    while ((bytes_read = read(data_fd, this->buffer, this->buff_size)) > 0)
+    {
+        if ((bytes_send=socketserver_send(this->server,this->buffer,bytes_read)) == -1)
+        {
+            close(data_fd);
+            return false;
+        }
+    }
+    if (bytes_read < 0)
+    {
+        close(data_fd);
+        return false;
+    }
+    close(data_fd);
+    return true;
+}
+
+bool aesdsocket_start_process(aesdsocket_t* this)
+{
+    openlog("aesdsocket_started", LOG_PID, LOG_USER);
+    if(socketserver_connect(this->server, this->ip_client) == false)
+    {
+        perror("accept");
+        return false;
+    }
+    // Notify there is a connection from a client IP
+    syslog(LOG_INFO,"Accepted connection from %s\n", this->ip_client);
+
+     // Receive Routine
+     aesdsocket_recv_routine(this);
+     // Send Routine
+     if(aesdsocket_send_routine(this) == false)
+     {
+         syslog(LOG_ERR, "Error sending data to client");
+         socketserver_close_connection(this->server);
+         return false;
+         //socketserver_close_connection(my_socket);
+         //socketserver_dtor(my_socket);
+         //remove(DATA_FILE);
+         //exit(EXIT_FAILURE);
+     }
+     return true;
+}
+
+bool aesdsocket_stop(aesdsocket_t* this)
 {
     bool closed=false;
-    if(close(this->client_sfd)!= -1)
+    openlog("aesdsocket_stop", LOG_PID, LOG_USER);
+    // Notify closing connection in the client IP
+    syslog(LOG_INFO,"Closed connection from %s\n", this->ip_client);
+    if(socketserver_close_connection(this->server))
     {
         closed=true;
     }
+    closelog();
     return closed;
 }
-ssize_t aesdsocket_recv(aesdsocket_t* this, char* buffer, size_t buff_size)
-{
-    return recv(this->client_sfd, buffer, buff_size-1,0);
-}
 
-ssize_t aesdsocket_send(aesdsocket_t* this, char* buffer, size_t buff_size)
-{
-   return send(this->client_sfd, buffer, buff_size, 0);
-}

@@ -5,9 +5,12 @@ all: aesdsocket
 
 default: aesdsocket
 
-aesdsocket: main.o socketserver.o
+aesdsocket: main.o aesdsocket.o socketserver.o
 	$(ARCH) $^ -o $@
 main.o: main.c
+	$(ARCH) -c $<
+
+asedsocket.o: aesdsocket.c aesdsocket.h
 	$(ARCH) -c $<
 socketserver.o: socketserver.c socketserver.h
 	$(ARCH) -c $<

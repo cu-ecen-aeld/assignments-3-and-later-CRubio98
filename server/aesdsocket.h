@@ -1,44 +1,37 @@
 #ifndef AESDSOCKET_H
 #define AESDSOCKET_H
 
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <syslog.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "socketserver.h"
 
-#define LISTEN_BACKLOG      1
-#define DEFAULT_PORT        "9000"
-
-struct aesdsocket
+#define DATA_FILE           "/var/tmp/aesdsocketdata"
+#define IP_LENGTH           16
+struct aesd_socket
 {
-    int client_sfd;
-    int socketfd;
-    socklen_t peer_addr_size;
-    struct sockaddr_storage peer_addr;
-};
-typedef struct aesdsocket aesdsocket_t;
+    char* buffer;
+    char* ip_client;
+    size_t buff_size;
+    size_t ip_size;
+    socketserver_t* server;
 
-aesdsocket_t* aesdsocket_ctor(void);
+};
+typedef struct aesd_socket aesdsocket_t;
+
+aesdsocket_t* aesdsocket_ctor(size_t buffer_size);
 
 void aesdsocket_dtor(aesdsocket_t* this);
 
-bool aesdsocket_setup_server(aesdsocket_t* this, struct addrinfo hints);
+bool aesdsocket_conf_server(aesdsocket_t* this, const char* socket_port);
 
-bool aesdsocket_listen(aesdsocket_t* this);
+bool aesdsocket_server_listen(aesdsocket_t* this);
 
-bool aesdsocket_connect(aesdsocket_t* this,char* client_ip);
+bool aesdsocket_recv_routine(aesdsocket_t* this);
 
-bool aesdsocket_close_connection(aesdsocket_t* this);
+bool aesdsocket_send_routine(aesdsocket_t* this);
 
-ssize_t aesdsocket_recv(aesdsocket_t* this, char* buffer, size_t buff_size);
+bool aesdsocket_start_process(aesdsocket_t* this);
 
-ssize_t aesdsocket_send(aesdsocket_t* this, char* buffer, size_t buff_size);
+bool aesdsocket_stop(aesdsocket_t* this);
 
 #endif
