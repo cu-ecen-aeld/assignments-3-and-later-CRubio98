@@ -34,7 +34,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6);
 
 bool socketserver_listen(socketserver_t* this);
 
-bool socketserver_connect(socketserver_t* this,char* client_ip);
+bool socketserver_connect(socketserver_t* this,char* client_ip,size_t ip_length);
 
 bool socketserver_close_connection(socketserver_t* this);
 

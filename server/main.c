@@ -50,6 +50,7 @@ void daemonize(bool daemon,aesdsocket_t* socket_app)
     {
         // we are in the parent process so exit
         printf("The PID of child process is = %d\n", pid);
+        aesdsocket_dtor(socket_app);
         exit(EXIT_SUCCESS);
     }
     // We are the child

@@ -83,7 +83,7 @@ bool socketserver_listen(socketserver_t* this)
     return listening;
 }
 
-bool socketserver_connect(socketserver_t* this,char* client_ip)
+bool socketserver_connect(socketserver_t* this,char* client_ip, size_t ip_length)
 {
     this->client_sfd= accept(this->socketfd,(struct sockaddr *) &this->peer_addr,
                              &this->peer_addr_size);
@@ -96,7 +96,7 @@ bool socketserver_connect(socketserver_t* this,char* client_ip)
     // Get client IP
     inet_ntop(this->peer_addr.ss_family,
               &((struct sockaddr_in*)&(this->peer_addr))->sin_addr,
-              client_ip, INET_ADDRSTRLEN);
+              client_ip, ip_length);
 
     return true;
 }

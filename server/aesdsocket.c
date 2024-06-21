@@ -17,13 +17,14 @@ aesdsocket_t* aesdsocket_ctor(size_t buffer_size)
         return NULL;
     }
 
-    new_aesdsocket->ip_client=(char*) malloc(sizeof(IP_LENGTH+1));
+    new_aesdsocket->ip_client=(char*) malloc(IP_LENGTH);
     if(new_aesdsocket->ip_client == NULL)
     {
         free(new_aesdsocket->buffer);
         free(new_aesdsocket);
         return NULL;
     }
+    new_aesdsocket->ip_size=IP_LENGTH;
 
     new_aesdsocket->server= socketserver_ctor();
 
@@ -136,7 +137,7 @@ bool aesdsocket_send_routine(aesdsocket_t* this)
 bool aesdsocket_start_process(aesdsocket_t* this)
 {
     openlog("aesdsocket_started", LOG_PID, LOG_USER);
-    if(socketserver_connect(this->server, this->ip_client) == false)
+    if(socketserver_connect(this->server, this->ip_client,this->ip_size) == false)
     {
         perror("accept");
         return false;
