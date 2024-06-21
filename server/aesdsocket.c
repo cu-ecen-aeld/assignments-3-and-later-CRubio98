@@ -64,6 +64,7 @@ bool aesdsocket_server_listen(aesdsocket_t* this)
 {
     // Listen LISTEN_BACKLOG connections;
     bool listening=true;
+    openlog("aesdsocket_listen", LOG_PID, LOG_USER);
     syslog(LOG_DEBUG,"Starting Listening...");
     if(!socketserver_listen(this->server))
     {

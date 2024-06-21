@@ -23,7 +23,7 @@ void socketserver_dtor(socketserver_t* this)
 
 bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
 {
-    openlog("aesdsocket_setup", LOG_PID, LOG_USER);
+    openlog("socket_setup", LOG_PID, LOG_USER);
 
     // first, load up address structs with getaddrinfo():
     struct addrinfo conf_values;
@@ -46,6 +46,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
     if(this->socketfd == -1)
     {
         syslog(LOG_ERR,"Error opening socket server fd");
+        closelog();
         return false;
     }
 
@@ -55,6 +56,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
     {
         syslog(LOG_ERR,"Failed to set SO_REUSEADDR");
         close(this->socketfd);
+        closelog();
         return false;
     }
 
@@ -63,12 +65,14 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
             res->ai_addrlen) == -1)
     {
         syslog(LOG_ERR,"Error binding desired port");
-        close(this->socketfd); 
+        close(this->socketfd);
+        closelog();
         return false;
     }
 
     // Free res addr info
     freeaddrinfo(res);
+    closelog();
     return true;
 }
 

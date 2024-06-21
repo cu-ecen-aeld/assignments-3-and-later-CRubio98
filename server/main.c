@@ -14,7 +14,9 @@ static void signal_handler (int signo)
 {
     if(signo == SIGINT || signo == SIGTERM)
     {
+        openlog("Signal_handler", LOG_PID, LOG_USER);
         syslog(LOG_INFO,"Caught signal, exiting");
+        closelog();
         waiting_cnn = false;
 
     }
@@ -49,7 +51,7 @@ void daemonize(bool daemon,aesdsocket_t* socket_app)
     if (pid > 0)
     {
         // we are in the parent process so exit
-        printf("The PID of child process is = %d\n", pid);
+        syslog(LOG_INFO,"The PID of child process is = %d\n", pid);
         aesdsocket_dtor(socket_app);
         exit(EXIT_SUCCESS);
     }
@@ -77,7 +79,8 @@ int main(int argc, char* argv[])
 {
     bool daemon = false;
     int opt;
-
+    // Set Logs
+    openlog("aesdsocket-main", LOG_PID, LOG_USER);
     // Set sigaction and handler
     struct sigaction finish_connection;
     memset(&finish_connection,0,sizeof(struct sigaction));
@@ -94,10 +97,9 @@ int main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
         }
     }
-    // Set Logs
-    openlog(NULL, LOG_PID, LOG_USER);
 
     // make a socket server:
+    syslog(LOG_DEBUG, "Starting App");
     const char* socket_port="9000";
     aesdsocket_t* socket_app=aesdsocket_ctor(BUFF_SIZE);
     if(socket_app == NULL)
