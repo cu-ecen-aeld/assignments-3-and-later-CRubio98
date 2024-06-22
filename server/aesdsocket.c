@@ -1,250 +1,178 @@
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <syslog.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "aesdsocket.h"
 
-#define LISTEN_BACKLOG  1
-#define BUFF_SIZE       1024
-#define DATA_FILE       "/var/tmp/aesdsocketdata"
-
-bool waiting_cnn = true;
-
-static void signal_handler (int signo)
+aesdsocket_t* aesdsocket_ctor(size_t buffer_size)
 {
-    if(signo == SIGINT || signo == SIGTERM)
+    aesdsocket_t* new_aesdsocket= (aesdsocket_t*) malloc(sizeof(aesdsocket_t));
+    if(new_aesdsocket == NULL)
     {
-        syslog(LOG_INFO,"Caught signal, exiting");
-        waiting_cnn = false;
-
+        return NULL;
     }
+
+    new_aesdsocket->buff_size=buffer_size;
+
+    new_aesdsocket->buffer= (char*) malloc(buffer_size);
+    if(new_aesdsocket->buffer == NULL)
+    {
+        free(new_aesdsocket);
+        return NULL;
+    }
+
+    new_aesdsocket->ip_client=(char*) malloc(IP_LENGTH);
+    if(new_aesdsocket->ip_client == NULL)
+    {
+        free(new_aesdsocket->buffer);
+        free(new_aesdsocket);
+        return NULL;
+    }
+    new_aesdsocket->ip_size=IP_LENGTH;
+
+    new_aesdsocket->server= socketserver_ctor();
+
+    if(new_aesdsocket->server == NULL)
+    {
+        free(new_aesdsocket->ip_client);
+        free(new_aesdsocket->buffer);
+        free(new_aesdsocket);
+        return NULL;
+    }
+    return new_aesdsocket;
 }
 
-int main(int argc, char* argv[])
+void aesdsocket_dtor(aesdsocket_t* this)
 {
-    bool daemon = false;
-    char client_ip[INET_ADDRSTRLEN];
-    int socketfd, operative_sfd, opt;
-    socklen_t peer_addr_size;
-    struct sockaddr_storage peer_addr;
-    struct addrinfo hints;
-    struct addrinfo *res;
+    if(!this){return;}
 
-    // Set sigaction and handler
-    struct sigaction finish_connection;
-    memset(&finish_connection,0,sizeof(struct sigaction));
-    finish_connection.sa_handler=signal_handler;
+    socketserver_dtor(this->server);
+    free(this->ip_client);
+    free(this->buffer);
+    free(this);
+    remove(DATA_FILE);
+}
 
-    if(sigaction(SIGTERM,&finish_connection,NULL) != 0 ||
-       sigaction(SIGINT,&finish_connection,NULL)!= 0 )
-    {
-        syslog(LOG_ERR, "Sigaction Error");
-        perror("Error when setting signals");
-        exit(EXIT_FAILURE);
-    }
-    // Check for daemon mode
-    while ((opt = getopt(argc, argv, "d")) != -1)
-    {
-        switch (opt) {
-            case 'd':
-                daemon = true;
-                break;
-            default:
-                fprintf(stderr, "Usage: %s [-d] (daemon)\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    }
-    // Set Logs
-    openlog(NULL, LOG_PID, LOG_USER);
+bool aesdsocket_conf_server(aesdsocket_t* this, const char* socket_port)
+{
 
-    // first, load up address structs with getaddrinfo():
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;  // use IPv4
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+    // Start the socket server
+    if(!socketserver_setup(this->server,socket_port, false))
+    {
+        return false;
+    }
+    return true;
+}
 
-    getaddrinfo(NULL, "9000", &hints, &res);
-
-    // make a socket:
-    socketfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if(socketfd == -1)
-    {
-        syslog(LOG_ERR,"Error opening socket server fd");
-        exit(EXIT_FAILURE);
-    }
-    // Reuse Addres
-    const int tmp = 1;
-    if (setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
-    {
-        perror("Failed to set SO_REUSEADDR");
-        close(socketfd);
-        exit(EXIT_FAILURE);
-    }
-    // bind it to the port we passed in to getaddrinfo():
-    if(bind(socketfd, res->ai_addr, res->ai_addrlen) == -1)
-    {
-        syslog(LOG_ERR,"Error binding desired port");
-        close(socketfd); 
-        exit(EXIT_FAILURE);
-    }
-    // Free res addr info
-    freeaddrinfo(res);
-
-    if (daemon)
-    {
-        // Create Process
-        pid_t pid = fork();
-        if (pid == -1)
-        {
-            // Error creating child process
-            syslog(LOG_ERR,"ERROR: Can not create child process");
-            close(socketfd);
-            exit(EXIT_FAILURE);
-        }
-        if (pid > 0)
-        {
-            // we are in the parent process so exit
-            printf("The PID of child process is = %d\n", pid);
-            exit(EXIT_SUCCESS);
-        }
-        // We are the child
-        int sid = setsid();
-        if (sid < 0)
-        {
-            syslog(LOG_ERR, "couldn't create session");
-            close(socketfd);
-            exit(EXIT_FAILURE);
-        }
-        if ((chdir("/")) < 0)
-        {
-            syslog(LOG_ERR, "couldnt change process work dir");
-            close(socketfd);
-            exit(EXIT_FAILURE);
-        }
-        dup2(open("/dev/null", O_RDWR), STDIN_FILENO);
-        dup2(STDIN_FILENO, STDOUT_FILENO);
-        dup2(STDOUT_FILENO, STDERR_FILENO);
-    }
+bool aesdsocket_server_listen(aesdsocket_t* this)
+{
     // Listen LISTEN_BACKLOG connections;
-    if(listen(socketfd, LISTEN_BACKLOG) == -1)
-    {
-        syslog(LOG_ERR,"Error listening");
-        close(socketfd); 
-        exit(EXIT_FAILURE);
-    }
-    
+    bool listening=true;
+    openlog("aesdsocket_listen", LOG_PID, LOG_USER);
     syslog(LOG_DEBUG,"Starting Listening...");
+    if(!socketserver_listen(this->server))
+    {
+       syslog(LOG_ERR, "Socket server could not listen");
+       listening=false;
+    }
+    closelog();
+    return listening;
+}
+
+bool aesdsocket_recv_routine(aesdsocket_t* this)
+{
     // Open aesdsocketdata
     int data_fd = open(DATA_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    ssize_t bytes_received;
+
     if (data_fd < 0)
     {
-            perror("Failed to open aesdsocketdata");
-            close(socketfd); 
-            exit(EXIT_FAILURE);
+        return false;
     }
-
-    // Loop for connection
-    while(waiting_cnn)
+    while((bytes_received=socketserver_recv(this->server, this->buffer, this->buff_size))> 0)
     {
-        peer_addr_size=sizeof peer_addr;
-        operative_sfd= accept(socketfd,(struct sockaddr *) &peer_addr, &peer_addr_size);
-        if(operative_sfd == -1)
+        char* line_end;
+        const char delim = '\n';
+        //ssize_t bytes_written;
+        if((line_end = memchr(this->buffer, delim, bytes_received)) != NULL)
         {
-            perror("accept");
-            continue;
+            size_t bytes_to_write = line_end - this->buffer + 1; // include the newline character
+            ///bytes_written = 
+            write (data_fd, this->buffer, bytes_to_write);
+            //if (bytes_written == -1 || bytes_written != bytes_to_write)
+            //{
+            //    syslog(LOG_ERR,"Error ocurred while writing your string");
+            //}
+            sync();
+            break;
         }
-
-        // Get client IP
-        inet_ntop(peer_addr.ss_family,
-            &((struct sockaddr_in*)&peer_addr)->sin_addr,
-            client_ip, sizeof client_ip);
-
-        // Notify there is a connection from a client IP
-        syslog(LOG_INFO,"Accepted connection from %s\n", client_ip);
-
-        char buffer[BUFF_SIZE]={0};
-        ssize_t bytes_received;
-
-        // Receive Routine
-        while((bytes_received=recv(operative_sfd, buffer, sizeof(buffer)-1,0))> 0)
-        {
-            syslog(LOG_DEBUG,"Received %ld bytes\n", bytes_received);
-            char* line_end;
-            const char delim = '\n';
-            ssize_t bytes_written;
-            if((line_end = memchr(buffer, delim, bytes_received)) != NULL)
-            {
-                size_t bytes_to_write = line_end - buffer + 1; // include the newline character
-                bytes_written = write (data_fd, buffer, bytes_to_write);
-                if (bytes_written == -1 || bytes_written != bytes_to_write)
-                {
-                    syslog(LOG_ERR,"Error ocurred while writing your string");
-                }
-                sync();
-                break;
-            }
-            syslog(LOG_DEBUG,"No more delimiters found");
-            write(data_fd,buffer,bytes_received);
-        }
-        // Send Routine
-        // move to start of the file
-            if (lseek(data_fd, 0, SEEK_SET) == -1)
-            {
-                syslog(LOG_ERR, "Cannot move to the head of the file");
-                perror("Failed to move to head of the file");
-                close(data_fd);
-                remove(DATA_FILE);
-                exit(EXIT_FAILURE);
-            }
-            ssize_t n;
-            ssize_t bytes_send;
-            memset(buffer,0,sizeof(buffer));
-            while ((n = read(data_fd, buffer, sizeof(buffer))) > 0)
-            {
-                syslog(LOG_DEBUG, "Read %ld bytes", n);
-                if ((bytes_send=send(operative_sfd, buffer, n, 0)) == -1)
-                {
-                    syslog(LOG_DEBUG, "Error when sending to client socket");
-                    perror("Failed to send file content into the client socket");
-                    close(operative_sfd);
-                    close(data_fd);
-                    remove(DATA_FILE);
-                    exit(EXIT_FAILURE);
-                }
-                syslog(LOG_DEBUG, "Sent %ld bytes", bytes_send);
-            }
-            if (n == 0)
-            {
-                syslog(LOG_DEBUG, "Reached EOF");
-            }
-            else if (n < 0)
-            {
-                perror("Error reading file");
-                close (data_fd);
-                close(socketfd);
-                remove(DATA_FILE);
-                exit(EXIT_FAILURE);
-            }
-
-        // Notify closing connection in the client IP
-        syslog(LOG_INFO,"Closed connection from %s\n", client_ip);
-        close(operative_sfd);
+        write(data_fd,this->buffer,bytes_received);
     }
-
-    //Close socket fd
-    close(socketfd);
-    // close fd for DATAFILE
     close(data_fd);
-    remove(DATA_FILE);
-
-    return 0;
+    return true;
 }
+
+bool aesdsocket_send_routine(aesdsocket_t* this)
+{
+    // Open aesdsocketdata to read
+    int data_fd = open(DATA_FILE, O_RDONLY, 0644);
+    if (data_fd < 0)
+    {
+        return false;
+    }
+    ssize_t bytes_read;
+    ssize_t bytes_send;
+    while ((bytes_read = read(data_fd, this->buffer, this->buff_size)) > 0)
+    {
+        if ((bytes_send=socketserver_send(this->server,this->buffer,bytes_read)) == -1)
+        {
+            close(data_fd);
+            return false;
+        }
+    }
+    if (bytes_read < 0)
+    {
+        close(data_fd);
+        return false;
+    }
+    close(data_fd);
+    return true;
+}
+
+bool aesdsocket_start_process(aesdsocket_t* this)
+{
+    openlog("aesdsocket_started", LOG_PID, LOG_USER);
+    if(socketserver_connect(this->server, this->ip_client,this->ip_size) == false)
+    {
+        perror("accept");
+        return false;
+    }
+    // Notify there is a connection from a client IP
+    syslog(LOG_INFO,"Accepted connection from %s\n", this->ip_client);
+
+     // Receive Routine
+     aesdsocket_recv_routine(this);
+     // Send Routine
+     if(aesdsocket_send_routine(this) == false)
+     {
+         syslog(LOG_ERR, "Error sending data to client");
+         socketserver_close_connection(this->server);
+         return false;
+         //socketserver_close_connection(my_socket);
+         //socketserver_dtor(my_socket);
+         //remove(DATA_FILE);
+         //exit(EXIT_FAILURE);
+     }
+     return true;
+}
+
+bool aesdsocket_stop(aesdsocket_t* this)
+{
+    bool closed=false;
+    openlog("aesdsocket_stop", LOG_PID, LOG_USER);
+    // Notify closing connection in the client IP
+    syslog(LOG_INFO,"Closed connection from %s\n", this->ip_client);
+    if(socketserver_close_connection(this->server))
+    {
+        closed=true;
+    }
+    closelog();
+    return closed;
+}
+
