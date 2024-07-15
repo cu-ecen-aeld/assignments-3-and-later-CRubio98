@@ -1,47 +1,27 @@
 #include "socketserver.h"
 
-socketserver_t* socketserver_ctor(void)
-{
-    socketserver_t* new_socketserver = (socketserver_t*) malloc(sizeof(socketserver_t));
-    if(new_socketserver != NULL)
-    {
-        // Get size of struct
-        new_socketserver->peer_addr_size=sizeof new_socketserver->peer_addr;
-    }
-
-    return new_socketserver;
-}
-
-void socketserver_dtor(socketserver_t* this)
-{
-    if(!this){return;}
-
-    // Close the socket server file descriptor
-    close(this->socketfd);
-    free(this);
-}
-
-bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
+bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6, int listen_backlog)
 {
     openlog("socket_setup", LOG_PID, LOG_USER);
 
+    this->listen_backlog = listen_backlog;
+
     // first, load up address structs with getaddrinfo():
-    struct addrinfo conf_values;
 
-    memset(&conf_values, 0, sizeof conf_values);
-    if(use_IPv6){conf_values.ai_family = AF_INET6;}
-    else{ conf_values.ai_family = AF_INET;}
-    conf_values.ai_socktype = SOCK_STREAM;
-    conf_values.ai_flags = AI_PASSIVE;     // fill in my IP for me
+    memset(&this->server_info, 0, sizeof (struct addrinfo));
+    if(use_IPv6){this->server_info.ai_family = AF_INET6;}
+    else{ this->server_info.ai_family = AF_INET;}
+    this->server_info.ai_socktype = SOCK_STREAM;
+    this->server_info.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    // We will get addrs info from hints argument
-    struct addrinfo *res;
-    getaddrinfo(NULL, port, &conf_values, &res);
+    // We will get complete server host info with our required settings
+    struct addrinfo* res;
+    getaddrinfo(NULL, port, &this->server_info, &res);
 
     // Get a new socket file descriptor
     this->socketfd = socket(res->ai_family,
-                                      res->ai_socktype,
-                                      res->ai_protocol);
+                            res->ai_socktype,
+                            res->ai_protocol);
 
     if(this->socketfd == -1)
     {
@@ -50,7 +30,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
         return false;
     }
 
-    // Reuse Address
+    // Reuse Address setting
     const int tmp = 1;
     if (setsockopt(this->socketfd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1)
     {
@@ -62,7 +42,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
 
     // bind it to the port we passed in to getaddrinfo():
     if(bind(this->socketfd,res->ai_addr,
-            res->ai_addrlen) == -1)
+           res->ai_addrlen) == -1)
     {
         syslog(LOG_ERR,"Error binding desired port");
         close(this->socketfd);
@@ -79,7 +59,7 @@ bool socketserver_setup(socketserver_t* this, const char* port, bool use_IPv6)
 bool socketserver_listen(socketserver_t* this)
 {
     bool listening = true;
-    if(listen(this->socketfd, LISTEN_BACKLOG) == -1)
+    if(listen(this->socketfd, this->listen_backlog) == -1)
     {
         listening=false;
     }
@@ -87,38 +67,59 @@ bool socketserver_listen(socketserver_t* this)
     return listening;
 }
 
-bool socketserver_connect(socketserver_t* this,char* client_ip, size_t ip_length)
+socketclient_t* socketserver_wait_conn(socketserver_t* this)
 {
-    this->client_sfd= accept(this->socketfd,(struct sockaddr *) &this->peer_addr,
-                             &this->peer_addr_size);
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_size = sizeof(client_addr);
+    int client_ip_length;
 
-    if(this->client_sfd == -1)
+    int client_fd= accept(this->socketfd,(struct sockaddr *) &client_addr,
+                             &client_addr_size);
+
+    if(client_fd == -1)
     {
-        return false;
+        return NULL;
+    }
+    if( this->server_info.ai_family == AF_INET6)
+    {
+        client_ip_length = INET6_ADDRSTRLEN;
+    }
+    else
+    {
+        client_ip_length = INET_ADDRSTRLEN;
     }
 
-    // Get client IP
-    inet_ntop(this->peer_addr.ss_family,
-              &((struct sockaddr_in*)&(this->peer_addr))->sin_addr,
-              client_ip, ip_length);
+    socketclient_t* client = socketclient_ctor(client_ip_length);
 
-    return true;
+    if(!socketclient_setup(client, client_fd, client_addr))
+    {
+        return NULL;
+    }
+
+    return client;
 }
-bool socketserver_close_connection(socketserver_t* this)
+bool socketserver_close_conn(socketserver_t* this,socketclient_t* client)
 {
     bool closed=false;
-    if(close(this->client_sfd)!= -1)
+    if(socketclient_close(client)!= -1)
     {
         closed=true;
     }
     return closed;
 }
-ssize_t socketserver_recv(socketserver_t* this, char* buffer, size_t buff_size)
+
+int socketserver_close(socketserver_t* this)
 {
-    return recv(this->client_sfd, buffer, buff_size-1,0);
+    // Close the socket server file descriptor
+    return close(this->socketfd);
 }
 
-ssize_t socketserver_send(socketserver_t* this, char* buffer, size_t buff_size)
+ssize_t socketserver_recv(socketserver_t* this, socketclient_t* client ,char* buffer, size_t buff_size)
 {
-   return send(this->client_sfd, buffer, buff_size, 0);
+    return recv(socketclient_get_fd(client), buffer, buff_size-1,0);
+}
+
+ssize_t socketserver_send(socketserver_t* this,socketclient_t* client , char* buffer, size_t buff_size)
+{
+   return send(socketclient_get_fd(client), buffer, buff_size, 0);
 }

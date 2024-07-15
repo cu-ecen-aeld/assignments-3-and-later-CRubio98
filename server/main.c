@@ -125,11 +125,9 @@ int main(int argc, char* argv[])
     // Loop for connection
     while(waiting_cnn)
     {
-        if(aesdsocket_start_process(socket_app))
-        {
-            aesdsocket_stop(socket_app);
-        }
+        aesdsocket_start_process(socket_app);
     }
+    aesdsocket_stop(socket_app);
     // Destroy Socket App
     aesdsocket_dtor(socket_app);
     return 0;
