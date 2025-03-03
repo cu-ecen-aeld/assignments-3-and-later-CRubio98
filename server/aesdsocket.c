@@ -1,3 +1,5 @@
+#include <time.h>
+#include <signal.h>
 #include "aesdsocket.h"
 #include "thread_list.h"
 
@@ -6,9 +8,15 @@ static socketserver_t s_server;
 static char buffer[BUFF_SIZE];
 static pthread_mutex_t file_mtx;
 
+//static struct timerData
+//{
+//    int myData;
+//};
+
 /*=================================PRIVATE FUNCTION DECLARATIONS=====================================*/
 
 /* Thread functions */
+static void timer_thread(union sigval sigval);
 static void* thread_connection(void* args);
 /* ---------------- */
 
@@ -21,6 +29,28 @@ static bool aesdsocket_stop();
 
 /*=================================PRIVATE FUNCTION DEFINITIONS=====================================*/
 
+static void timer_thread(union sigval sigval)
+{
+    //struct thread_data *td = (struct thread_data*) sigval.sival_ptr;
+    char timestampBuff[64];
+    time_t current_time;
+    struct tm *local_time;
+
+    time(&current_time);
+    local_time = localtime(&current_time);
+
+    // turn it into RFC 2822 formatted timestamp
+    strftime(timestampBuff, sizeof(timestampBuff), "timestamp:%a, %b %d %Y %H:%M:%S %z\n", local_time);
+
+    if(pthread_mutex_lock(&file_mtx)==0)
+    {
+        int data_fd = open(DATA_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+        write (data_fd, timestampBuff, sizeof(timestampBuff));
+        sync();
+        close(data_fd);
+        pthread_mutex_unlock(&file_mtx);
+    }
+}
 
 static void* thread_connection(void* args)
 {
@@ -160,8 +190,27 @@ bool aesdsocket_server_listen()
 void aesdsocket_exec()
 {   
     extern bool waiting_cnn;
+    timer_t timerId = 0;
+    struct sigevent sEvent;
+
+    pthread_mutex_init(&file_mtx,NULL);
+    int clock_id = CLOCK_MONOTONIC;
+    memset(&sEvent,0,sizeof(struct sigevent));
+    sEvent.sigev_notify = SIGEV_THREAD;
+    //sEvent.sigev_value.sival_ptr = &td;
+    sEvent.sigev_notify_function = timer_thread;
+    timer_create(clock_id,&sEvent,&timerId);
+
+    struct itimerspec its = {   .it_value.tv_sec  = 10,
+        .it_value.tv_nsec = 0,
+        .it_interval.tv_sec  = 10,
+        .it_interval.tv_nsec = 0
+    };
+
+    (void)its;
+    timer_settime(timerId, 0, &its, NULL);
+
     openlog("aesdsocket_started", LOG_PID, LOG_USER);
-    
     while(waiting_cnn == true)
     {
         socketclient_t* new_client;
@@ -206,6 +255,7 @@ void aesdsocket_exec()
             }
         }
     }
+    timer_delete(timerId);
     closelog();
     aesdsocket_stop();
     remove(DATA_FILE);
