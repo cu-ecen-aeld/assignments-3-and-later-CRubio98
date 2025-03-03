@@ -1,18 +1,10 @@
 #include "socketclient.h"
 
-socketclient_t* socketclient_ctor(size_t ip_length)
+socketclient_t* socketclient_ctor(void)
 {
     socketclient_t* new_socketclient= (socketclient_t*) malloc(sizeof(socketclient_t));
     if(new_socketclient == NULL)
     {
-        return NULL;
-    }
-
-    new_socketclient->ip_length=ip_length;
-    new_socketclient->ip=(char*) malloc(ip_length+1);
-    if(new_socketclient->ip == NULL)
-    {
-        free(new_socketclient);
         return NULL;
     }
 
@@ -23,7 +15,6 @@ socketclient_t* socketclient_ctor(size_t ip_length)
 void socketclient_dtor(socketclient_t* this)
 {
     if(!this){return;}
-    free(this->ip);
     free(this);
 }
 
@@ -34,7 +25,7 @@ bool socketclient_setup(socketclient_t* this,int socketfd, struct sockaddr_stora
     // Get client IP
     inet_ntop(this->peer_addr.ss_family,
               &((struct sockaddr_in*)&(this->peer_addr))->sin_addr,
-              this->ip, this->ip_length);
+              this->ip, CLIENT_IP);
 
     return true;
 }

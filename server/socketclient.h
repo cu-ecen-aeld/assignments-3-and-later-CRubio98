@@ -10,16 +10,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define CLIENT_IP           17
 struct aesd_client
 {
   int socketfd;
   struct sockaddr_storage peer_addr;
-  char* ip;
-  size_t ip_length;
+  char ip[CLIENT_IP];
 };
 typedef struct aesd_client socketclient_t;
 
-socketclient_t* socketclient_ctor(size_t ip_length);
+socketclient_t* socketclient_ctor(void);
 
 void socketclient_dtor(socketclient_t* this);
 

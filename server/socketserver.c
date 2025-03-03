@@ -71,7 +71,7 @@ socketclient_t* socketserver_wait_conn(socketserver_t* this)
 {
     struct sockaddr_storage client_addr;
     socklen_t client_addr_size = sizeof(client_addr);
-    int client_ip_length;
+    //int client_ip_length;
 
     int client_fd= accept(this->socketfd,(struct sockaddr *) &client_addr,
                              &client_addr_size);
@@ -80,16 +80,16 @@ socketclient_t* socketserver_wait_conn(socketserver_t* this)
     {
         return NULL;
     }
-    if( this->server_info.ai_family == AF_INET6)
+    /*if( this->server_info.ai_family == AF_INET6)
     {
         client_ip_length = INET6_ADDRSTRLEN;
     }
     else
     {
         client_ip_length = INET_ADDRSTRLEN;
-    }
+    }*/
 
-    socketclient_t* client = socketclient_ctor(client_ip_length);
+    socketclient_t* client = socketclient_ctor();
 
     if(!socketclient_setup(client, client_fd, client_addr))
     {
@@ -98,7 +98,8 @@ socketclient_t* socketserver_wait_conn(socketserver_t* this)
 
     return client;
 }
-bool socketserver_close_conn(socketserver_t* this,socketclient_t* client)
+
+bool socketserver_close_conn(socketclient_t* client)
 {
     bool closed=false;
     if(socketclient_close(client)!= -1)

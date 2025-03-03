@@ -30,7 +30,7 @@ bool socketserver_listen(socketserver_t* this);
 
 socketclient_t* socketserver_wait_conn(socketserver_t* this);
 
-bool socketserver_close_conn(socketserver_t* this,socketclient_t* client);
+bool socketserver_close_conn(socketclient_t* client);
 
 int socketserver_close(socketserver_t* this);
 
