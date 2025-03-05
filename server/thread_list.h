@@ -7,6 +7,13 @@
 #include <sys/socket.h>
 #include "socketclient.h"
 
+typedef enum
+{
+  LIST_EMPTY,
+  SRCH_NOT_FOUND,
+  SRCH_FOUND
+}eSearchState;
+
 struct thread_data
 {
   socketclient_t* client;
@@ -27,7 +34,7 @@ void threadList_insert(thread_data_t* data);
 
 bool threadList_removeAt(int pos);
 
-int threadList_searchState(bool state);
+eSearchState threadList_searchState(bool state, int* pos);
 
 void threadList_getAt(int position,thread_data_t* data);
 

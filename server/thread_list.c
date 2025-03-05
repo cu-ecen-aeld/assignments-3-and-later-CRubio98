@@ -1,9 +1,10 @@
+#include <syslog.h>
 #include "thread_list.h"
 
 
 struct thread_node
 {
-  thread_data_t data;
+  thread_data_t* data;
   SLIST_ENTRY(thread_node) next; //next node element
 };typedef struct thread_node thread_node_t;
 
@@ -21,7 +22,7 @@ static struct thread_node* new_node(thread_data_t* data)
     struct thread_node* new_thread_node = (struct thread_node*) malloc(sizeof(struct thread_node));
     if(new_thread_node != NULL)
     {
-        new_thread_node->data = *data;
+        new_thread_node->data = data;
         new_thread_node->next.sle_next=NULL;
     }
     return new_thread_node;
@@ -108,25 +109,26 @@ bool threadList_removeAt(int pos)
     return true;
 }
 
-int threadList_searchState(bool state)
+eSearchState threadList_searchState(bool state, int* pos)
 {
     int index=0;
 
     if(SLIST_EMPTY(&thread_list))
     {
-        return -1;
+        return LIST_EMPTY;
     }
 
     thread_node_t* current_node;
     SLIST_FOREACH(current_node, &thread_list, next)
     {
-        if(current_node->data.complete == state)
+        if(current_node->data->complete == state)
         {
-            return index;
+            *pos=index;
+            return SRCH_FOUND;
         }
         index++;
     }
-    return -1;
+    return SRCH_NOT_FOUND;
 }
 
 void threadList_getAt(int position,thread_data_t* data)
@@ -145,6 +147,6 @@ void threadList_getAt(int position,thread_data_t* data)
         }
     }
 
-    *data=current_node->data;
+    data=current_node->data;
     return;
 }

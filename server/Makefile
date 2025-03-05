@@ -1,4 +1,4 @@
-CC=gcc -Wall -Werror -pthread
+CC=gcc -g -Wall -Werror -pthread
 ARCH=$(CROSS_COMPILE)$(CC)
 
 all: aesdsocket

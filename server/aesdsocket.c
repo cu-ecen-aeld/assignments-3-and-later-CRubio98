@@ -222,32 +222,38 @@ void aesdsocket_exec()
         }
 
         //create thread and prepare linked list
-        thread_data_t thread_data;
-        thread_data.client = new_client;
-        thread_data.complete = false;
+        thread_data_t* thread_data= (thread_data_t*)malloc(sizeof(thread_data_t));
+        thread_data->client = new_client;
+        thread_data->complete = false;
         threadList_init();
 
         syslog(LOG_INFO, "Starting Thread...");
-        int ret= pthread_create(&thread_data.thread_id,NULL,thread_connection,NULL);
+        int ret= pthread_create(&thread_data->thread_id,NULL,thread_connection,(void*)thread_data);
         if(ret != 0)
         {
             syslog(LOG_ERR,"Error creating thread");
             socketclient_dtor(new_client);
             continue;
         }
-        threadList_insert(&thread_data);
-
+        syslog(LOG_INFO, "Thread instanciated...");
+        threadList_insert(thread_data);
+        syslog(LOG_INFO, "Thread inserted at list...");
         bool finished_threads = false;
+        int position;
+        eSearchState search_state;
         while(!finished_threads)
         {
+            syslog(LOG_INFO, "Checking Threads in list...");
             //check if any thread is complete
-            int position=threadList_searchState(true);
-            if (position != -1)
+            search_state=threadList_searchState(true, &position);
+            if (SRCH_FOUND == search_state)
             {
-                threadList_getAt(position,&thread_data);
-                pthread_join(thread_data.thread_id,NULL);
-                syslog(LOG_INFO,"Thread %ld is complete", thread_data.thread_id);
+                threadList_getAt(position,thread_data);
+                pthread_join(thread_data->thread_id,NULL);
+                syslog(LOG_INFO,"Thread %ld is complete", thread_data->thread_id);
                 threadList_removeAt(position);
+                socketclient_dtor(thread_data->client);
+                free(thread_data);
             }
             else
             {
