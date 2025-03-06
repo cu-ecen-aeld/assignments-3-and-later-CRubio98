@@ -62,7 +62,7 @@ static void* thread_connection(void* args)
     socketclient_get_ip(thread_info->client,client_ip,IP_LENGTH);
     syslog(LOG_INFO,"Accepted connection from %s\n", client_ip);
     
-    if(pthread_mutex_lock(&file_mtx) != 0)
+    if(pthread_mutex_lock(&file_mtx) == 0)
     {
         // Receive Routine
         aesdsocket_recv_routine(thread_info->client);
@@ -73,14 +73,13 @@ static void* thread_connection(void* args)
             syslog(LOG_ERR, "Error sending data to client");
             socketserver_close_conn(thread_info->client);
             return (void*)false;
-            pthread_mutex_unlock(&file_mtx);  
-            thread_info->complete = true;
         }
     }
-
+    pthread_mutex_unlock(&file_mtx);
+    thread_info->complete = true;
     // Notify closing connection in the client IP
     syslog(LOG_INFO,"Closed connection from %s\n", client_ip);
-    if(socketserver_close_conn(thread_info->client))
+    if(!socketserver_close_conn(thread_info->client))
     {
         syslog(LOG_ERR, "Error closing connection");
         return (void*)false;
@@ -92,6 +91,7 @@ static void* thread_connection(void* args)
 static bool aesdsocket_recv_routine(socketclient_t* client)
 {
     // Open aesdsocketdata
+    syslog(LOG_ERR,"Receiving data from client");
     int data_fd = open(DATA_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     ssize_t bytes_received;
 
