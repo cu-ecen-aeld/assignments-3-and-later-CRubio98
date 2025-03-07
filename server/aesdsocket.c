@@ -210,9 +210,9 @@ void aesdsocket_exec()
     (void)its;
     timer_settime(timerId, 0, &its, NULL);
 
-    openlog("aesdsocket_started", LOG_PID, LOG_USER);
     while(waiting_cnn == true)
     {
+        openlog("aesdsocket_started", LOG_PID, LOG_USER);
         socketclient_t* new_client;
         if((new_client=socketserver_wait_conn(&s_server)) == NULL)
         {
@@ -238,17 +238,24 @@ void aesdsocket_exec()
         syslog(LOG_INFO, "Thread instanciated...");
         threadList_insert(thread_data);
         syslog(LOG_INFO, "Thread inserted at list...");
-        bool finished_threads = false;
-        int position;
-        eSearchState search_state;
-        while(!finished_threads)
+        bool list_end = false;
+        int position=0;
+        bool get_state;
+        while(!list_end)
         {
             syslog(LOG_INFO, "Checking Threads in list...");
             //check if any thread is complete
-            search_state=threadList_searchState(true, &position);
-            if (SRCH_FOUND == search_state)
+
+            get_state=threadList_getAt(position,thread_data);
+            if(!get_state)
             {
-                threadList_getAt(position,thread_data);
+                list_end = true;
+                syslog(LOG_INFO,"Finished List iteration");
+                break;
+            }
+            if (thread_data->complete)
+            {
+                //threadList_getAt(position,thread_data);
                 pthread_join(thread_data->thread_id,NULL);
                 syslog(LOG_INFO,"Thread %ld is complete", thread_data->thread_id);
                 threadList_removeAt(position);
@@ -257,8 +264,9 @@ void aesdsocket_exec()
             }
             else
             {
-                finished_threads = true;
+                syslog(LOG_INFO,"Thread %ld is not complete", thread_data->thread_id);
             }
+            position++;
         }
     }
     timer_delete(timerId);

@@ -14,6 +14,12 @@ typedef enum
   SRCH_FOUND
 }eSearchState;
 
+typedef enum
+{
+  eThreadNotFinish,
+  eThreadFinish
+}eThreadState;
+
 struct thread_data
 {
   socketclient_t* client;
@@ -36,6 +42,6 @@ bool threadList_removeAt(int pos);
 
 eSearchState threadList_searchState(bool state, int* pos);
 
-void threadList_getAt(int position,thread_data_t* data);
+bool threadList_getAt(int position,thread_data_t* data);
 
 #endif //THREAD_LIST_H

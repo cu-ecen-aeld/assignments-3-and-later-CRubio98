@@ -131,22 +131,25 @@ eSearchState threadList_searchState(bool state, int* pos)
     return SRCH_NOT_FOUND;
 }
 
-void threadList_getAt(int position,thread_data_t* data)
+bool threadList_getAt(int position,thread_data_t* data)
 {
+
     if(SLIST_EMPTY(&thread_list))
     {
-        return;
+        return false;
     }
 
     thread_node_t* current_node= SLIST_FIRST(&thread_list);
 
-    if (position != 0)
-    {
-        for (int i = 0; i < position; i++) {
+        for (int i = 0; i < position; i++)
+        {
             current_node=SLIST_NEXT(current_node, next);
+            if (current_node == NULL)
+            {
+                return false;
+            }
         }
-    }
 
     data=current_node->data;
-    return;
+    return true;
 }
