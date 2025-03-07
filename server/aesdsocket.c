@@ -209,7 +209,7 @@ void aesdsocket_exec()
 
     (void)its;
     timer_settime(timerId, 0, &its, NULL);
-
+    threadList_init();
     while(waiting_cnn == true)
     {
         openlog("aesdsocket_started", LOG_PID, LOG_USER);
@@ -225,7 +225,6 @@ void aesdsocket_exec()
         thread_data_t* thread_data= (thread_data_t*)malloc(sizeof(thread_data_t));
         thread_data->client = new_client;
         thread_data->complete = false;
-        threadList_init();
 
         syslog(LOG_INFO, "Starting Thread...");
         int ret= pthread_create(&thread_data->thread_id,NULL,thread_connection,(void*)thread_data);
@@ -269,6 +268,11 @@ void aesdsocket_exec()
             position++;
         }
     }
+    //while()
+    //{
+//
+    //}
+    threadList_dtor();
     timer_delete(timerId);
     closelog();
     aesdsocket_stop();

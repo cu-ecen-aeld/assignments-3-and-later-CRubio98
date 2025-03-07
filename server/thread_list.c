@@ -48,13 +48,13 @@ void threadList_init(void)
 
 void threadList_dtor(void)
 {
-    thread_node_t* next_thread;
-    while(!SLIST_FIRST(&thread_list))
+    thread_node_t* head_thread;
+    while(!SLIST_EMPTY(&thread_list))
     {
-        next_thread = SLIST_NEXT(SLIST_FIRST(&thread_list),next);
+        head_thread = SLIST_FIRST(&thread_list);
 
         SLIST_REMOVE_HEAD(&thread_list, next);
-        node_dtor(next_thread);
+        node_dtor(head_thread);
     }
 }
 
