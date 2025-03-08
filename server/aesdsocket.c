@@ -8,22 +8,47 @@ static socketserver_t s_server;
 static char buffer[BUFF_SIZE];
 static pthread_mutex_t file_mtx;
 
-//static struct timerData
-//{
-//    int myData;
-//};
-
 /*=================================PRIVATE FUNCTION DECLARATIONS=====================================*/
 
-/* Thread functions */
+/* Thread functions
+*/
+/**
+ * @brief Thread function to handle the timer
+ * @param sigval Signal value
+ */
 static void timer_thread(union sigval sigval);
+
+/**
+ * @brief Thread function to handle the connection
+ * @param args Thread data
+ * @return void* 
+ */
 static void* thread_connection(void* args);
+
 /* ---------------- */
 
-/* AESDSOCKET App functions */
+/* AESDSOCKET App functions
+*/
+/**
+ * @brief Routine to receive data from the client
+ * @param client Pointer to the client
+ * @return true if the data was received, false otherwise
+ */
 static bool aesdsocket_recv_routine(socketclient_t* client);
+
+/**
+ * @brief Routine to send data to the client
+ * @param client Pointer to the client
+ * @return true if the data was sent, false otherwise
+ */
 static bool aesdsocket_send_routine(socketclient_t* client);
+
+/**
+ * @brief Stop the server
+ * @return true if the server was stopped, false otherwise
+ */
 static bool aesdsocket_stop();
+
 /* --------------------------*/
 
 

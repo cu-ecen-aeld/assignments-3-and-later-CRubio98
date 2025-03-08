@@ -8,6 +8,10 @@
 
 bool waiting_cnn = true;
 
+/**
+ * @brief Signal handler for SIGINT and SIGTERM
+ * @param signo Signal number
+ */
 static void signal_handler (int signo)
 {
     if(signo == SIGINT || signo == SIGTERM)
@@ -20,6 +24,11 @@ static void signal_handler (int signo)
     }
 }
 
+/**
+ * @brief Set up the actions for SIGINT and SIGTERM
+ * @param action Pointer to the sigaction struct
+ * @return true if the actions were set up, false otherwise
+ */
 bool setup_actions(struct sigaction* action)
 {
     action->sa_handler=signal_handler;
@@ -33,6 +42,10 @@ bool setup_actions(struct sigaction* action)
     return true;
 }
 
+/**
+ * @brief Daemonize the process
+ * @param daemon Boolean to set if the process will be daemonized
+ */
 void daemonize(bool daemon)
 {
     // Create Process
