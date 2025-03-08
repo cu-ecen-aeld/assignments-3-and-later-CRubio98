@@ -31,22 +31,26 @@ static bool aesdsocket_stop();
 
 static void timer_thread(union sigval sigval)
 {
-    //struct thread_data *td = (struct thread_data*) sigval.sival_ptr;
+
     char timestampBuff[64];
     time_t current_time;
     struct tm *local_time;
+    int strTimerecv;
 
     time(&current_time);
     local_time = localtime(&current_time);
 
     // turn it into RFC 2822 formatted timestamp
-    strftime(timestampBuff, sizeof(timestampBuff), "timestamp:%a, %b %d %Y %H:%M:%S %z\n", local_time);
+    strTimerecv=strftime(timestampBuff, sizeof(timestampBuff), "timestamp:%a, %b %d %Y %H:%M:%S %z\n", local_time);
 
     if(pthread_mutex_lock(&file_mtx)==0)
     {
         int data_fd = open(DATA_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-        write (data_fd, timestampBuff, sizeof(timestampBuff));
-        sync();
+        if(data_fd != -1)
+        {
+            write (data_fd, timestampBuff, strTimerecv);
+            sync();
+        }
         close(data_fd);
         pthread_mutex_unlock(&file_mtx);
     }
@@ -232,6 +236,7 @@ void aesdsocket_exec()
         {
             syslog(LOG_ERR,"Error creating thread");
             socketclient_dtor(new_client);
+            free(thread_data);
             continue;
         }
         syslog(LOG_INFO, "Thread instanciated...");
@@ -273,12 +278,14 @@ void aesdsocket_exec()
     int pos=0;
     while(threadList_getAt(pos,&thread_notfinished))
     {
+        pthread_join(thread_notfinished->thread_id,NULL);
         socketclient_dtor(thread_notfinished->client);
         free(thread_notfinished);
         pos++;
     }
     threadList_dtor();
     timer_delete(timerId);
+    pthread_mutex_destroy(&file_mtx);
     closelog();
     aesdsocket_stop();
     remove(DATA_FILE);
