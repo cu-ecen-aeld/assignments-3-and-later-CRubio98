@@ -131,7 +131,7 @@ eSearchState threadList_searchState(bool state, int* pos)
     return SRCH_NOT_FOUND;
 }
 
-bool threadList_getAt(int position,thread_data_t* data)
+bool threadList_getAt(int position,thread_data_t** data)
 {
 
     if(SLIST_EMPTY(&thread_list))
@@ -150,6 +150,6 @@ bool threadList_getAt(int position,thread_data_t* data)
             }
         }
 
-    data=current_node->data;
+    *data=current_node->data;
     return true;
 }

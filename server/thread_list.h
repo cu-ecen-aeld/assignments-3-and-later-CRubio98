@@ -42,6 +42,6 @@ bool threadList_removeAt(int pos);
 
 eSearchState threadList_searchState(bool state, int* pos);
 
-bool threadList_getAt(int position,thread_data_t* data);
+bool threadList_getAt(int position,thread_data_t** data);
 
 #endif //THREAD_LIST_H

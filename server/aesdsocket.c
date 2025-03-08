@@ -245,7 +245,7 @@ void aesdsocket_exec()
             syslog(LOG_INFO, "Checking Threads in list...");
             //check if any thread is complete
 
-            get_state=threadList_getAt(position,thread_data);
+            get_state=threadList_getAt(position,&thread_data);
             if(!get_state)
             {
                 list_end = true;
@@ -268,10 +268,15 @@ void aesdsocket_exec()
             position++;
         }
     }
-    //while()
-    //{
-//
-    //}
+    // Free clients and Thread_data allocations that would have been pending
+    thread_data_t* thread_notfinished=NULL;
+    int pos=0;
+    while(threadList_getAt(pos,&thread_notfinished))
+    {
+        socketclient_dtor(thread_notfinished->client);
+        free(thread_notfinished);
+        pos++;
+    }
     threadList_dtor();
     timer_delete(timerId);
     closelog();
