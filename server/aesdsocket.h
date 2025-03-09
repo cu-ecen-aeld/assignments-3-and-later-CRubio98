@@ -7,7 +7,7 @@
 #include "socketserver.h"
 #include "socketclient.h"
 
-#define BUFF_SIZE           2046
+#define BUFF_SIZE           4092
 #define DATA_FILE           "/var/tmp/aesdsocketdata"
 #define IP_LENGTH           16
 

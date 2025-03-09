@@ -1,4 +1,4 @@
-CC=gcc -g -Wall -Werror -pthread
+CC=gcc -Wall -Werror
 ARCH=$(CROSS_COMPILE)$(CC)
 
 all: aesdsocket
@@ -6,7 +6,7 @@ all: aesdsocket
 default: aesdsocket
 
 aesdsocket:  thread_list.o main.o aesdsocket.o socketserver.o socketclient.o thread_list.o
-	$(ARCH) $^ -o $@
+	$(ARCH) $^ -o $@ -lrt -pthread
 
 main.o: main.c
 	$(ARCH) -c $<
