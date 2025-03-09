@@ -1,5 +1,5 @@
-CC=gcc -Wall -Werror
-ARCH=$(CROSS_COMPILE)$(CC)
+CC ?= gcc -Wall -Werror
+ARCH ?= $(CROSS_COMPILE)$(CC)
 
 all: aesdsocket
 
