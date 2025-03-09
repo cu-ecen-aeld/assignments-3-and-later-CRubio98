@@ -1,23 +1,24 @@
-CC ?= gcc -Wall -Werror
-ARCH ?= $(CROSS_COMPILE)$(CC)
+CC ?= $(CROSS_COMPILE)gcc
+CFLAGS ?= -g -Wall -Werror
+LDFLAGS ?= -lpthread -lrt
 
 all: aesdsocket
 
 default: aesdsocket
 
 aesdsocket:  thread_list.o main.o aesdsocket.o socketserver.o socketclient.o thread_list.o
-	$(ARCH) $^ -o $@ -lrt -pthread
+	$(CC) ${CFLAGS} $^ -o $@ ${LDFLAGS}
 
 main.o: main.c
-	$(ARCH) -c $<
+	$(CC) -c $<
 asedsocket.o: aesdsocket.c aesdsocket.h
-	$(ARCH) -c $<
+	$(CC) -c $<
 socketserver.o: socketserver.c socketserver.h
-	$(ARCH) -c $<
+	$(CC) -c $<
 socketclient.o: socketclient.c socketclient.h
-	$(ARCH) -c $<
+	$(CC) -c $<
 thread_list.o: thread_list.c thread_list.h
-	$(ARCH) -c $<
+	$(CC) -c $<
 
 .PHONY: clean
 clean:
